@@ -1,0 +1,203 @@
+---
+title: "Assignment 3 - Part 2 - Diagnosing Schizophrenia from Voice"
+author: "Katrine Nymann"
+date: "October 17, 2017"
+output: 
+  md_document:
+        variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("groupdata2")
+pacman::p_load(groupdata2, simr)
+library(tidyverse, lme4)
+#install.packages("pROC")
+library(pROC)
+
+library(caret)
+#install.packages('e1071', dependencies=TRUE)
+pacman::p_load(readr,dplyr,stringr,lmerTest,Metrics,caret)
+
+#Libraries for cross validation with cvms
+library(cvms)
+library(groupdata2) # fold()
+library(knitr) # kable()
+library(dplyr) # %>% arrange()
+library(ggplot2)
+```
+
+## Assignment 3 - Part 2 - Diagnosing schizophrenia from voice
+
+In the previous part of the assignment you generated a bunch of "features", that is, of quantitative descriptors of voice in schizophrenia. We then looked at whether we could replicate results from the previous literature.
+We now want to know whether we can automatically diagnose schizophrenia from voice only, that is, relying on the set of features you produced last time, we will try to produce an automated classifier.
+Again, remember that the dataset containst 7 studies and 3 languages. Feel free to only include Danish (Study 1-4) if you feel that adds too much complexity.
+
+Issues to be discussed your report:
+- Should you run the analysis on all languages/studies at the same time? 
+- Choose your best acoustic feature from part 1. How well can you diagnose schizophrenia just using it?
+- Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression.
+- Discuss the "classification" process: which methods are you using? Which confounds should you be aware of? What are the strength and limitation of the analysis?
+- Bonus question: Logistic regression is only one of many classification algorithms. Try using others and compare performance. Some examples: Discriminant Function, Random Forest, Support Vector Machine, etc. The package caret provides them. 
+- Bonus Bonus question: It is possible combine the output of multiple  classification models to improve classification accuracy. For inspiration see,
+https://machinelearningmastery.com/machine-learning-ensembles-with-r/
+ The interested reader might also want to look up 'The BigChaos Solution to the Netflix Grand Prize'
+
+## Learning objectives
+- Learn the basics of classification in a machine learning framework
+- Design, fit and report logistic regressions
+- Apply feature selection techniques
+
+### Let's start
+
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+
+
+
+1)
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature.
+
+```{r}
+#We read the dataset from part 1
+df_2 <- read.csv("df_2.csv")
+
+#I have to rename it in order to knit it later
+df_2 <- df_2 %>% 
+  rename(
+    pitch = inner_quartil_range
+    )
+#We scale variables
+df_2$iqr_s <- scale(df_2$pitch)
+df_2$speakingtime_s <- scale(as.numeric(df_2$ASD_speakingtime))
+df_2$speechrate_s <- scale(df_2$speechrate)
+
+df_2$ASD_speakingtime <- as.numeric(as.character(df_2$ASD_speakingtime))
+
+#we calculate pause duration
+df_2$pause_dur <- (df_2$dur-df_2$ASD_speakingtime)/df_2$npause
+
+df_2$pause_dur <- ifelse(df_2$pause_dur == "Inf", 0, df_2$pause_dur)
+
+df_2$pause_dur <- scale(df_2$pause_dur)
+
+#As we had the speechrate feature produce the best model in part 1, we will use this feature for the logistic regression
+
+diagnose <- glmer(diagnosis ~ speechrate_s + (1|uPairID), data = df_2, family = binomial, control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+summary(diagnose)
+
+```
+Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+```{r}
+#We will make a confusion matrix
+
+#First we predict values with our diagnose model
+df_2$PredictionsPerc=predict(diagnose)
+#We categorize into either diagnosis 1 or 0
+df_2$Predictions[df_2$PredictionsPerc>0]=1
+df_2$Predictions[df_2$PredictionsPerc<=0]=0
+
+#We change into factors
+df_2$Predictions <- as.factor(df_2$Predictions)
+df_2$diagnosis <- as.factor(df_2$diagnosis)
+
+#We make a confusion Matrix
+confusionMatrix(data = df_2$Predictions, reference = df_2$diagnosis, positive = "1") 
+
+#We change into factors again
+df_2$Predictions <- as.factor(df_2$Predictions)
+df_2$diagnosis <- as.factor(df_2$diagnosis)
+
+#We make a roc Curve
+rocCurve <- roc(response = df_2$diagnosis, predictor = df_2$PredictionsPerc)
+rocCurve
+#We plot the curve
+plot(rocCurve, main = "ROC Curve")
+
+
+```
+We try with another model with more features
+```{r}
+#We add inner quartile range
+diagnose_2 <- glmer(diagnosis ~ speechrate_s + iqr_s + (1|uPairID), data = df_2, family = binomial, control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+summary(diagnose_2)
+
+#We make a confusion Matrix
+#First we predict values with our diagnose model
+df_2$PredictionsPerc2=predict(diagnose_2)
+#We categorize into either diagnosis 1 or 0
+df_2$Predictions2[df_2$PredictionsPerc2>0]=1
+df_2$Predictions2[df_2$PredictionsPerc2<=0]=0
+#We produce the confusion matrix
+df_2$Predictions2 <- as.factor(df_2$Predictions2)
+df_2$diagnosis <- as.factor(df_2$diagnosis)
+confusionMatrix(data = df_2$Predictions2, reference = df_2$diagnosis, positive = "1")
+
+rocCurve2 <- roc(response = df_2$diagnosis, predictor = df_2$PredictionsPerc2)
+rocCurve2
+```
+
+
+
+
+```{r, include = FALSE}
+#### Manually finding the different measures #####
+#We calculate sensitivity
+sensitivity(data = df_2$Predictions, reference = df_2$diagnosis, positive = 1) 
+
+#We calculate specificity
+specificity(data = df_2$Predictions, reference = df_2$diagnosis, negative = 0) 
+
+#We calculate PPV
+posPredValue(data = df_2$Predictions, reference = df_2$diagnosis, positive = 1) 
+
+#We calculate NPV
+negPredValue(data = df_2$Predictions, reference = df_2$diagnosis, negative = 0) 
+```
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
+```{r}
+# Set seed for reproducibility
+set.seed(7)
+
+# Fold data 
+data <- fold(df_2, k = 4,
+             cat_col = 'diagnosis',
+             id_col = 'uID') %>% 
+  arrange(.folds)
+
+# Show first 15 rows of data
+data %>% head(15) %>% kable()
+
+
+### Now we cross validate
+
+CV <- cross_validate(data, "diagnosis~speechrate_s", 
+                     fold_cols = '.folds', 
+                     family='binomial')
+
+# Show results
+CV
+
+#We get an average accuracy of 56% 
+
+# We take out the results metrics
+CV %>% select(1:9) %>% kable()
+
+# Confusion matrix
+CV$`Confusion Matrix`[[1]] %>% kable()
+
+
+## We make a ROC curve
+cv_plot(CV, type = "ROC") +
+  theme_bw() + ggtitle("ROC curve")
+```
+Link to the assignment report: https://docs.google.com/document/d/11DQqMdC33JOjShAPvn6snAsEmwdoEiS3LJycVRIX0Oc/edit?usp=sharing
