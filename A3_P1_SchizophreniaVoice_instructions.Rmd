@@ -102,33 +102,33 @@ See placeholder code here for help.
 
 
 ```{r}
-read_pitch <- function(filename){
-    # load data
-    data <- read.delim(filename)
-    # parse filename to extract study, diagnosis, subject and trial
-    df <- as.data.frame(t(unlist(regmatches(filename, gregexpr("[[:digit:]]+\\.*[[:digit:]]*", filename)))))
-    #df <- df %>% rename(study=V1, diagnosis = V2, subj= V3, trial = V4, f=V5) %>% select(-c(f))
-    
-    # extract pitch descriptors (mean, sd, iqr, etc)
-    df$mean_frequency<-mean(data$f0)
-    df$sd_frequency<-sd(data$f0)
-    df$inner_quartil_range<-IQR(data$f0)
-    
-    # combine all this data in one dataset
-    return(df)
-}
-
-# test it on just one file while writing the function
-#test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
-
-#We load all the files (we have already done this)
-listed<-list.files(pattern="*.txt")%>%purrr::map_df(read_pitch)
-
-### We rename the columns for the pitch data
-pitch_data <- listed %>% select(-c(V5)) %>% rename(study = V1, diagnosis = V2, subj = V3, trial = V4, f = V6) %>%select(-c(f))
-
-#We write the csv 
-write_csv(pitch_data, "pitch_data.csv")
+# read_pitch <- function(filename){
+#     # load data
+#     data <- read.delim(filename)
+#     # parse filename to extract study, diagnosis, subject and trial
+#     df <- as.data.frame(t(unlist(regmatches(filename, gregexpr("[[:digit:]]+\\.*[[:digit:]]*", filename)))))
+#     #df <- df %>% rename(study=V1, diagnosis = V2, subj= V3, trial = V4, f=V5) %>% select(-c(f))
+#     
+#     # extract pitch descriptors (mean, sd, iqr, etc)
+#     df$mean_frequency<-mean(data$f0)
+#     df$sd_frequency<-sd(data$f0)
+#     df$inner_quartil_range<-IQR(data$f0)
+#     
+#     # combine all this data in one dataset
+#     return(df)
+# }
+# 
+# # test it on just one file while writing the function
+# #test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
+# 
+# #We load all the files (we have already done this)
+# listed<-list.files(pattern="*.txt")%>%purrr::map_df(read_pitch)
+# 
+# ### We rename the columns for the pitch data
+# pitch_data <- listed %>% select(-c(V5)) %>% rename(study = V1, diagnosis = V2, subj = V3, trial = V4, f = V6) %>%select(-c(f))
+# 
+# #We write the csv 
+# write_csv(pitch_data, "pitch_data.csv")
 
 ```
 
@@ -159,7 +159,7 @@ soundname <- as.data.frame(t(stri_list2matrix(soundname)))
 soundname <- soundname %>%  select(-c(V5)) %>% rename(study = V1, diagnosis = V2, subj = V3, trial = V4)
 
 # Finally the pitch data
-read.csv("pitch_data.csv")
+pitch_data <- read.csv("pitch_data.csv")
 
 # Now we merge them
 #First we merge together the duration df and the soundname df we just created
